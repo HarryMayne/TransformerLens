@@ -1039,6 +1039,7 @@ class HookedTransformer(HookedRootModule):
     def from_pretrained(
         cls,
         model_name: str,
+        finetune_checkpoint: str | None = None,
         fold_ln: bool = True,
         center_writing_weights: bool = True,
         center_unembed: bool = True,
@@ -1271,7 +1272,7 @@ class HookedTransformer(HookedRootModule):
         # Get the state dict of the model (ie a mapping of parameter names to tensors), processed to
         # match the HookedTransformer parameter names.
         state_dict = loading.get_pretrained_state_dict(
-            official_model_name, cfg, hf_model, dtype=dtype, **from_pretrained_kwargs
+            official_model_name, finetune_checkpoint, cfg, hf_model, dtype=dtype, **from_pretrained_kwargs
         )
 
         # Create the HookedTransformer object

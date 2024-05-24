@@ -13,6 +13,7 @@ import einops
 import torch
 from huggingface_hub import HfApi
 from transformers import AutoConfig, AutoModelForCausalLM, BertForPreTraining
+from peft import PeftModel
 
 import transformer_lens.utils as utils
 from transformer_lens.HookedTransformerConfig import HookedTransformerConfig
@@ -1376,6 +1377,7 @@ def get_checkpoint_labels(model_name: str, **kwargs):
 # %% Loading state dicts
 def get_pretrained_state_dict(
     official_model_name: str,
+    finetune_checkpoint: str,
     cfg: HookedTransformerConfig,
     hf_model=None,
     dtype: torch.dtype = torch.float32,
@@ -1462,14 +1464,40 @@ def get_pretrained_state_dict(
                     **kwargs,
                 )
             else:
-                hf_model = AutoModelForCausalLM.from_pretrained(
-                    official_model_name,
-                    torch_dtype=dtype,
-                    token=huggingface_token,
-                    **kwargs,
-                )
+                # This is the standard part
+                if finetune_checkpoint is None:
+                    hf_model = AutoModelForCausalLM.from_pretrained(
+                        official_model_name,
+                        torch_dtype=dtype,
+                        token=huggingface_token,
+                        **kwargs,
+                    )
+                    print("\nYou have loaded the base model. Proceeding with that.\n")
+                else:
 
-            # Load model weights, and fold in layer norm weights
+                    # load the finetuned model
+                    finetune = AutoModelForCausalLM.from_pretrained(finetune_checkpoint)
+
+                    # assert that everything is correct and load the base model
+                    assert official_model_name == finetune.name_or_path
+                    base_model = AutoModelForCausalLM.from_pretrained(finetune.name_or_path)
+
+                    # merge the models
+                    hf_model = PeftModel.from_pretrained(
+                        base_model,
+                        finetune_checkpoint,
+                        torch_dtype=dtype,
+                        token=huggingface_token,
+                        **kwargs,
+                    )
+                    hf_model = hf_model.merge_and_unload()
+                    hf_model.eval()
+
+                    print(
+                        "\nYou have loaded a finetuned version of the model. Proceeding with that.\n"
+                    )
+
+        # Load model weights, and fold in layer norm weights
 
         for param in hf_model.parameters():
             param.requires_grad = False
